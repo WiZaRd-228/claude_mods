@@ -1,0 +1,11 @@
+{
+  "name": "usage-limits",
+  "version": "0.1.0",
+  "description": "Shows your Claude 5-hour and weekly usage limits live, right above the prompt",
+  "author": { "name": "WiZaRd-228", "url": "https://github.com/WiZaRd-228" },
+  "homepage": "https://github.com/WiZaRd-228/claude_mods",
+  "repository": "https://github.com/WiZaRd-228/claude_mods",
+  "license": "MIT",
+  "keywords": ["usage", "limits", "rate-limit", "status"],
+  "types": "./types/index.d.ts"
+}
