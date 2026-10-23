@@ -1,0 +1,38 @@
+name: windows-tray
+
+on:
+  push:
+    branches: [main]
+    tags: ['tray-v*']
+    paths:
+      - 'windows-tray/**'
+      - '.github/workflows/windows-tray.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish single-file exe
+        run: dotnet publish windows-tray/src/ClaudeLimitsTray/ClaudeLimitsTray.csproj -c Release -o out -warnaserror:nullable
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeLimitsTray
+          path: out/ClaudeLimitsTray.exe
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/tray-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/ClaudeLimitsTray.exe
+          generate_release_notes: true
