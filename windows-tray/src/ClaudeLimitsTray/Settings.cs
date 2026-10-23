@@ -24,6 +24,12 @@ internal sealed class Settings
 
     public int OverlayOffsetY { get; set; } = 150;
 
+    public bool FollowInput { get; set; } = true;
+
+    public int InputOffsetX { get; set; }
+
+    public int InputGap { get; set; } = 12;
+
     public Dictionary<string, int> Warned { get; set; } = new();
 
     public static Settings Load()

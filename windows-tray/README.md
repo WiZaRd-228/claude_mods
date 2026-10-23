@@ -3,10 +3,11 @@
 Your Claude subscription limits, always in sight, while you use the regular Claude desktop app.
 
 - **Tray icon** with the 5-hour usage percent, colored green / yellow (70%+) / red (90%+)
-- **Overlay** that sticks to the bottom of the Claude window, right above the message box, and shows the 5-hour and weekly windows with progress bars and reset countdowns
+- **One-line overlay** right above the Claude message box, as wide as the box: the 5-hour window on the left, the weekly window on the right, each with a progress bar and reset countdown. It moves up when the message box grows
 - **Notifications** at 80% and 95%, and when a limit resets
 - Shows only while Claude is the active window (configurable: always / when Claude is active / hidden)
-- Drag the overlay to move it; the position is remembered relative to the Claude window
+- Drag the overlay to move it; the position is remembered relative to the message box
+- The message box is found with Windows UI Automation; turn this off in **Overlay → Follow the message box** to pin the overlay relative to the window bottom instead
 
 ## Install
 
@@ -28,7 +29,7 @@ The app needs your claude.ai session to read your limits. Two ways:
 | Item | Does |
 | --- | --- |
 | Refresh now | Fetches limits immediately (also: left-click the icon) |
-| Overlay | When Claude is active / Always show / Hide, Reset position |
+| Overlay | When Claude is active / Always show / Hide, Follow the message box, Reset position |
 | Start with Windows | Adds or removes the app from autostart |
 | Import session from Claude Desktop | Re-imports the session (Claude Desktop must be closed) |
 | Sign in to claude.ai… | Logs in inside the app's own browser profile |

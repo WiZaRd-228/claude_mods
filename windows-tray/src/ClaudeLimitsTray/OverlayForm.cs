@@ -5,9 +5,14 @@ namespace ClaudeLimitsTray;
 
 internal sealed class OverlayForm : Form
 {
-    private const int Pad = 10;
-    private const int RowHeight = 22;
-    private const int BarWidth = 120;
+    public const int DefaultWidth = 560;
+    private const int MinWidth = 300;
+    private const int RowHeight = 28;
+    private const int Pad = 12;
+    private const int Gap = 24;
+    private const int Spacing = 8;
+    private const int MinBar = 24;
+    private const int MaxBar = 160;
     private const int BarHeight = 6;
 
     private static readonly Color Background = Color.FromArgb(32, 32, 34);
@@ -28,7 +33,7 @@ internal sealed class OverlayForm : Form
         BackColor = Background;
         Opacity = 0.94;
         DoubleBuffered = true;
-        Size = new Size(320, Pad * 2 + RowHeight);
+        Size = new Size(DefaultWidth, RowHeight);
         Cursor = Cursors.SizeAll;
     }
 
@@ -50,10 +55,18 @@ internal sealed class OverlayForm : Form
     {
         windows = list;
         message = statusMessage;
-        var rows = Math.Max(1, list.Count) + (statusMessage is not null && list.Count > 0 ? 1 : 0);
-        Size = new Size(LogicalToDeviceUnits(330), LogicalToDeviceUnits(Pad * 2 + RowHeight * rows));
         Invalidate();
     }
+
+    public void SetWidth(int deviceWidth)
+    {
+        var size = new Size(Math.Max(LogicalToDeviceUnits(MinWidth), deviceWidth), LogicalToDeviceUnits(RowHeight));
+        if (size == Size) return;
+        Size = size;
+        Invalidate();
+    }
+
+    public int DefaultDeviceWidth => LogicalToDeviceUnits(DefaultWidth);
 
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -81,43 +94,62 @@ internal sealed class OverlayForm : Form
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+        var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
 
         var pad = LogicalToDeviceUnits(Pad);
-        var row = LogicalToDeviceUnits(RowHeight);
-        var barWidth = LogicalToDeviceUnits(BarWidth);
-        var barHeight = LogicalToDeviceUnits(BarHeight);
-        var y = pad;
-
         if (windows.Count == 0)
         {
-            TextRenderer.DrawText(g, message ?? "Claude limits: waiting for data…", textFont, new Point(pad, y + 2), Muted);
+            TextRenderer.DrawText(g, message ?? "Claude limits: waiting for data…", textFont,
+                new Rectangle(pad, 0, Width - pad * 2, Height), Muted, flags | TextFormatFlags.EndEllipsis);
             return;
         }
 
-        foreach (var w in windows)
+        var segments = windows.Select(Segment.From).ToList();
+        var spacing = LogicalToDeviceUnits(Spacing);
+        var gap = LogicalToDeviceUnits(Gap);
+        var slot = (Width - pad * 2 - gap * (segments.Count - 1)) / segments.Count;
+        var textWidth = segments.Max(s => Measure(g, s) + spacing * 3);
+        var barWidth = Math.Clamp(slot - textWidth, LogicalToDeviceUnits(MinBar), LogicalToDeviceUnits(MaxBar));
+
+        for (var i = 0; i < segments.Count; i++)
         {
-            var percent = w.ShownPercent;
-            var color = Usage.ColorOf(percent);
-            var x = pad;
-
-            TextRenderer.DrawText(g, w.Label, labelFont, new Point(x, y + 2), Color.White);
-            x += LogicalToDeviceUnits(64);
-
-            var barTop = y + (row - barHeight) / 2;
-            using (var track = new SolidBrush(Track)) g.FillRectangle(track, x, barTop, barWidth, barHeight);
-            var filled = (int)Math.Round(barWidth * Math.Clamp(percent, 0, 100) / 100);
-            using (var fill = new SolidBrush(color)) g.FillRectangle(fill, x, barTop, filled, barHeight);
-            x += barWidth + LogicalToDeviceUnits(8);
-
-            TextRenderer.DrawText(g, $"{percent:0.#}%", labelFont, new Point(x, y + 2), color);
-            x += LogicalToDeviceUnits(46);
-
-            var left = w.IsReset ? "reset" : w.Left;
-            if (left.Length > 0) TextRenderer.DrawText(g, left, textFont, new Point(x, y + 2), Muted);
-            y += row;
+            var s = segments[i];
+            var width = Measure(g, s) + spacing * 3 + barWidth;
+            var slotLeft = pad + i * (slot + gap);
+            // Two windows hug opposite edges; any further ones sit in their own slot.
+            var x = segments.Count == 2 && i == 1 ? Width - pad - width : slotLeft;
+            DrawSegment(g, s, x, barWidth, spacing, flags);
         }
+    }
 
-        if (message is not null) TextRenderer.DrawText(g, message, textFont, new Point(pad, y + 2), Muted);
+    private int Measure(Graphics g, Segment s)
+    {
+        var size = TextRenderer.MeasureText(g, s.Label, labelFont).Width
+            + TextRenderer.MeasureText(g, s.Percent, labelFont).Width;
+        return s.Left.Length > 0 ? size + TextRenderer.MeasureText(g, s.Left, textFont).Width : size;
+    }
+
+    private void DrawSegment(Graphics g, Segment s, int x, int barWidth, int spacing, TextFormatFlags flags)
+    {
+        var color = Usage.ColorOf(s.Value);
+        x = DrawText(g, s.Label, labelFont, x, Color.White, flags) + spacing;
+
+        var barHeight = LogicalToDeviceUnits(BarHeight);
+        var barTop = (Height - barHeight) / 2;
+        using (var track = new SolidBrush(Track)) g.FillRectangle(track, x, barTop, barWidth, barHeight);
+        var filled = (int)Math.Round(barWidth * Math.Clamp(s.Value, 0, 100) / 100);
+        using (var fill = new SolidBrush(color)) g.FillRectangle(fill, x, barTop, filled, barHeight);
+        x += barWidth + spacing;
+
+        x = DrawText(g, s.Percent, labelFont, x, color, flags) + spacing;
+        if (s.Left.Length > 0) DrawText(g, s.Left, textFont, x, Muted, flags);
+    }
+
+    private int DrawText(Graphics g, string text, Font font, int x, Color color, TextFormatFlags flags)
+    {
+        var width = TextRenderer.MeasureText(g, text, font).Width;
+        TextRenderer.DrawText(g, text, font, new Rectangle(x, 0, width + 2, Height), color, flags);
+        return x + width;
     }
 
     protected override void Dispose(bool disposing)
@@ -129,5 +161,14 @@ internal sealed class OverlayForm : Form
         }
 
         base.Dispose(disposing);
+    }
+
+    private sealed record Segment(string Label, double Value, string Percent, string Left)
+    {
+        public static Segment From(LimitWindow w) => new(
+            w.Label,
+            w.ShownPercent,
+            $"{w.ShownPercent:0.#}%",
+            w.IsReset ? "reset" : w.Left);
     }
 }

@@ -17,7 +17,6 @@ internal sealed class TrayApp : ApplicationContext
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValue = "ClaudeLimitsTray";
-    private const int DefaultOffsetY = 150;
     private const int TooltipLimit = 127;
     private static readonly int[] WarnThresholds = { 80, 95 };
 
@@ -31,6 +30,7 @@ internal sealed class TrayApp : ApplicationContext
     private readonly System.Windows.Forms.Timer tickTimer = new() { Interval = 30_000 };
     private readonly OverlayForm overlay = new();
     private readonly ClaudeWindowTracker tracker = new();
+    private readonly InputBoxTracker inputTracker = new();
 
     private List<LimitWindow> windows = new();
     private SessionState state = SessionState.Starting;
@@ -58,7 +58,14 @@ internal sealed class TrayApp : ApplicationContext
         };
         pollTimer.Tick += async (_, _) => await RefreshAsync();
         tickTimer.Tick += (_, _) => UpdateViews();
-        tracker.Changed += PlaceOverlay;
+        tracker.Changed += () =>
+        {
+            inputTracker.Update(tracker.ClaudeWindow, tracker.IsClaudeActive);
+            PlaceOverlay();
+        };
+        inputTracker.Changed += PlaceOverlay;
+        inputTracker.IsEnabled = settings.FollowInput;
+        inputTracker.Update(tracker.ClaudeWindow, tracker.IsClaudeActive);
         overlay.Dragged += SaveOverlayOffset;
 
         UpdateViews();
@@ -268,14 +275,23 @@ internal sealed class TrayApp : ApplicationContext
             return;
         }
 
-        if (bounds is { } b)
+        if (InputBounds(bounds) is { } input)
         {
+            overlay.SetWidth(input.Width);
+            var x = input.Left + (input.Width - overlay.Width) / 2 + settings.InputOffsetX;
+            var y = input.Top - settings.InputGap - overlay.Height;
+            overlay.Location = ClampToScreen(new Point(x, y), overlay.Size);
+        }
+        else if (bounds is { } b)
+        {
+            overlay.SetWidth(Math.Min(overlay.DefaultDeviceWidth, b.Width - 40));
             var x = b.Left + (b.Width - overlay.Width) / 2 + settings.OverlayOffsetX;
             var y = b.Bottom - settings.OverlayOffsetY - overlay.Height;
             overlay.Location = ClampToScreen(new Point(x, y), overlay.Size);
         }
         else if (!overlay.Visible)
         {
+            overlay.SetWidth(overlay.DefaultDeviceWidth);
             var area = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1280, 720);
             overlay.Location = new Point(area.Right - overlay.Width - 16, area.Bottom - overlay.Height - 16);
         }
@@ -291,11 +307,27 @@ internal sealed class TrayApp : ApplicationContext
         return new Point(x, y);
     }
 
+    private Rectangle? InputBounds(Rectangle? window) =>
+        settings.FollowInput && window is { } w ? inputTracker.BoundsIn(w) : null;
+
     private void SaveOverlayOffset(Point location)
     {
-        if (tracker.ClaudeBounds is not { } b) return;
-        settings.OverlayOffsetX = location.X + overlay.Width / 2 - (b.Left + b.Width / 2);
-        settings.OverlayOffsetY = b.Bottom - (location.Y + overlay.Height);
+        var bounds = tracker.ClaudeBounds;
+        if (InputBounds(bounds) is { } input)
+        {
+            settings.InputOffsetX = location.X + overlay.Width / 2 - (input.Left + input.Width / 2);
+            settings.InputGap = input.Top - (location.Y + overlay.Height);
+        }
+        else if (bounds is { } b)
+        {
+            settings.OverlayOffsetX = location.X + overlay.Width / 2 - (b.Left + b.Width / 2);
+            settings.OverlayOffsetY = b.Bottom - (location.Y + overlay.Height);
+        }
+        else
+        {
+            return;
+        }
+
         settings.Save();
     }
 
@@ -319,10 +351,23 @@ internal sealed class TrayApp : ApplicationContext
         overlayMenu.DropDownItems.Add(ModeItem("Always show", OverlayMode.Always));
         overlayMenu.DropDownItems.Add(ModeItem("Hide", OverlayMode.Off));
         overlayMenu.DropDownItems.Add(new ToolStripSeparator());
+        overlayMenu.DropDownItems.Add(new ToolStripMenuItem("Follow the message box", null, (_, _) =>
+        {
+            settings.FollowInput = !settings.FollowInput;
+            inputTracker.IsEnabled = settings.FollowInput;
+            settings.Save();
+            PlaceOverlay();
+        })
+        {
+            Checked = settings.FollowInput,
+        });
         overlayMenu.DropDownItems.Add("Reset position", null, (_, _) =>
         {
-            settings.OverlayOffsetX = 0;
-            settings.OverlayOffsetY = DefaultOffsetY;
+            var defaults = new Settings();
+            settings.OverlayOffsetX = defaults.OverlayOffsetX;
+            settings.OverlayOffsetY = defaults.OverlayOffsetY;
+            settings.InputOffsetX = defaults.InputOffsetX;
+            settings.InputGap = defaults.InputGap;
             settings.Save();
             PlaceOverlay();
         });
@@ -398,6 +443,7 @@ internal sealed class TrayApp : ApplicationContext
         pollTimer.Dispose();
         tickTimer.Dispose();
         tracker.Dispose();
+        inputTracker.Dispose();
         overlay.Dispose();
         web.Dispose();
         tray.Dispose();
