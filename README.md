@@ -1,6 +1,15 @@
 # claude_mods
 
-Mods for [Claude Code](https://claude.com/claude-code).
+Small tools for Claude users.
+
+| Tool | For | What it does |
+| --- | --- | --- |
+| [Claude Limits Tray](windows-tray/) | Claude desktop app on Windows | Tray icon and an overlay above the message box with your 5-hour and weekly limits |
+| [usage-limits](#usage-limits) | Claude Code | A band above the prompt with the same limits |
+
+## Claude Limits Tray (Windows)
+
+Download `ClaudeLimitsTray.exe` from [Releases](https://github.com/WiZaRd-228/claude_mods/releases). Setup and details: [windows-tray/README.md](windows-tray/README.md).
 
 ## usage-limits
 
