@@ -53,17 +53,31 @@ function Copy-Locked($source, $target) {
 }
 
 Write-Section 'Claude data folders'
-$candidates = @("$env:APPDATA\Claude")
-$candidates += Get-ChildItem "$env:LOCALAPPDATA\Packages" -Directory -Filter 'Claude*' -ErrorAction SilentlyContinue |
-    ForEach-Object { Join-Path $_.FullName 'LocalCache\Roaming\Claude' }
+$candidates = @()
+foreach ($base in $env:APPDATA, $env:LOCALAPPDATA) {
+    $candidates += Get-ChildItem $base -Directory -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match 'claude|anthropic' } | ForEach-Object { $_.FullName }
+}
+foreach ($package in Get-ChildItem "$env:LOCALAPPDATA\Packages" -Directory -Filter 'Claude*' -ErrorAction SilentlyContinue) {
+    foreach ($sub in 'LocalCache\Roaming', 'LocalCache\Local') {
+        $candidates += Get-ChildItem (Join-Path $package.FullName $sub) -Directory -Force -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.FullName }
+    }
+}
 
 $root = $null
-foreach ($dir in $candidates) {
-    $exists = Test-Path $dir
-    Write-Host ("{0}  exists={1}" -f $dir, $exists)
-    if ($exists -and -not $root) { $root = $dir }
+foreach ($dir in $candidates | Select-Object -Unique) {
+    $marker = Get-ChildItem $dir -File -Force -Filter '.user-data*' -ErrorAction SilentlyContinue | Select-Object -First 1
+    $state = Get-ChildItem $dir -Recurse -Depth 2 -File -Force -Filter 'Local State' -ErrorAction SilentlyContinue | Select-Object -First 1
+    Write-Host ("{0}  hasLocalState={1}" -f $dir, [bool]$state)
+    if ($marker) {
+        Write-Host "  marker: $($marker.Name)  size=$($marker.Length)"
+        if ($marker.Length -gt 0 -and $marker.Length -lt 1024) { Write-Host "  marker content: $((Get-Content $marker.FullName -Raw).Trim())" }
+    }
+    if ($state -and -not $root) { $root = $state.DirectoryName }
 }
-if (-not $root) { Write-Host 'Claude Desktop data folder not found.' -ForegroundColor Red; exit 1 }
+if (-not $root) { Write-Host 'No folder with a Local State file found.' -ForegroundColor Red; exit 1 }
+Write-Host "Using data folder: $root" -ForegroundColor Green
 
 Write-Section 'Cookie stores'
 $cookieFiles = @(Get-ChildItem $root -Recurse -Depth 5 -File -Filter 'Cookies' -ErrorAction SilentlyContinue)
