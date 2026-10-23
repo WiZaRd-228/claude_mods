@@ -3,7 +3,6 @@ name: windows-tray
 on:
   push:
     branches: [main]
-    tags: ['tray-v*']
     paths:
       - 'windows-tray/**'
       - '.github/workflows/windows-tray.yml'
@@ -22,6 +21,13 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content windows-tray/src/ClaudeLimitsTray/ClaudeLimitsTray.csproj
+          "value=$($project.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1)" >> $env:GITHUB_OUTPUT
+
       - name: Publish single-file exe
         run: dotnet publish windows-tray/src/ClaudeLimitsTray/ClaudeLimitsTray.csproj -c Release -o out -warnaserror:nullable
 
@@ -31,8 +37,14 @@ jobs:
           path: out/ClaudeLimitsTray.exe
 
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/tray-v')
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: tray-v${{ steps.version.outputs.value }}
+          name: Claude Limits Tray ${{ steps.version.outputs.value }}
+          target_commitish: ${{ github.sha }}
           files: out/ClaudeLimitsTray.exe
-          generate_release_notes: true
+          overwrite_files: true
+          body: |
+            Windows tray utility showing your Claude 5-hour and weekly usage limits.
+            Download `ClaudeLimitsTray.exe` and run it. Setup: see windows-tray/README.md.

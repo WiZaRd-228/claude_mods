@@ -55,7 +55,7 @@ Files: `%LOCALAPPDATA%\ClaudeLimitsTray\` (`settings.json`, `log.txt`, `WebView2
 dotnet publish windows-tray/src/ClaudeLimitsTray/ClaudeLimitsTray.csproj -c Release -o out
 ```
 
-Needs the .NET 8 SDK. CI builds every push and attaches the exe to `tray-v*` tag releases.
+Needs the .NET 8 SDK. CI builds every push to main and publishes the exe as release `tray-v<Version>` from the project file.
 
 ---
 
